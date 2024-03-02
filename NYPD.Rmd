@@ -1,0 +1,99 @@
+---
+title: "NYPD Shooting Incidents - Demographics and Trends"
+author: "Christopher Whidden"
+output: html_document
+date: "2024-02-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ggmap)
+library(ggplot2)
+```
+
+# NYPD Shooting Incidents - Demographics and Trends
+
+## The Data
+
+The data is catalogued by the data.gov website.  The publisher of this data is New York Police Department (NYPD), and the host is NYC Open Data.  The data was last updated on April 27, 2023, and the dataset contains data for all reported shooting incidents going back to 2006 in New York City.
+
+## Import
+
+Import, transform strings to factors, drop incident key, and filter erroneous values.
+
+```{r import}
+url = 'https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD'
+nypd = read_csv(url)
+nypd = nypd %>% 
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE),
+         BORO = as.factor(BORO),
+         LOC_OF_OCCUR_DESC = as.factor(LOC_OF_OCCUR_DESC),
+         PRECINCT = as.factor(PRECINCT),
+         JURISDICTION_CODE = as.factor(JURISDICTION_CODE),
+         LOC_CLASSFCTN_DESC = as.factor(LOC_CLASSFCTN_DESC),
+         LOCATION_DESC = as.factor(LOCATION_DESC),
+         PERP_AGE_GROUP = as.factor(PERP_AGE_GROUP),
+         PERP_SEX = as.factor(PERP_SEX),
+         PERP_RACE = as.factor(PERP_RACE),
+         VIC_AGE_GROUP = as.factor(VIC_AGE_GROUP),
+         VIC_SEX = as.factor(VIC_SEX),
+         VIC_RACE = as.factor(VIC_RACE)) %>%
+  select(-c(INCIDENT_KEY)) %>%
+  filter(!(PERP_AGE_GROUP %in% c("1020","224","940")))
+
+summary(nypd)
+```
+
+## Including Plots
+
+```{r agegroup}
+library(ggplot2)
+nypd[!is.na(nypd$PERP_AGE_GROUP) & !(nypd$PERP_AGE_GROUP %in% c("(null)")),] %>%
+  ggplot(aes(x = PERP_AGE_GROUP)) +
+    geom_bar(fill = "blue", color = "black") +
+    labs(x = "Perp Age Group",
+         y = "Frequency",
+         title = "Histogram of Perp Age Group")
+```
+
+```{r sex}
+nypd[!is.na(nypd$PERP_SEX) & !(nypd$PERP_SEX %in% c("(null)")),] %>%
+  ggplot(aes(x = PERP_SEX)) +
+    geom_bar(fill = "blue", color = "black") +
+    labs(x = "Perp Sex",
+         y = "Frequency",
+         title = "Histogram of Perp Sex")
+```
+
+```{r byweek}
+byweek = nypd %>%
+  select(OCCUR_DATE) %>%
+  mutate(WEEK=floor_date(OCCUR_DATE, "weeks", week_start = 1)) %>%
+  group_by(WEEK) %>%
+  count()
+
+ggplot(data=byweek, aes(x=WEEK, y=n)) +
+  geom_line() +
+  labs(x="Week",
+       y="Incidents",
+       title="Incidents per week")
+```
+
+```{r model}
+model = lm(n ~ WEEK, data = byweek)
+byweek$pred = predict(model, newdata=byweek)
+ggplot(data=byweek) +
+  geom_line(aes(x=WEEK, y=n)) +
+  geom_line(aes(x=WEEK, y=pred), color = "red") +
+  labs(x="Week",
+       y="Incidents",
+       title="Incidents per week with model")
+```
+
+
+
+## Discussion on Bias
+
+This dataset had numerous sources of potential bias. Many rows have null values and therefore only portray the true data partially. The footnotes of the dataset say that numerous null values are the result of changes to official report forms.  My personal bias in this analysis is that I want to see a pattern in the data, even though there very well may be no pattern at all in the data.
